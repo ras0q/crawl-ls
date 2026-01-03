@@ -6,53 +6,13 @@
 import { assertEquals, assertStringIncludes } from "@std/assert";
 
 /**
- * Mock stdin/stdout for testing LSP communication.
+ * Helper to create JSON-RPC request message in LSP format.
  */
-class MockStdio {
-  private inputBuffer: string[] = [];
-  private outputBuffer: string[] = [];
-  private inputIndex = 0;
-
-  write(data: string) {
-    this.outputBuffer.push(data);
-  }
-
-  read(): string | undefined {
-    if (this.inputIndex >= this.inputBuffer.length) {
-      return undefined;
-    }
-
-    const message = this.inputBuffer[this.inputIndex];
-    this.inputIndex++;
-
-    // Extract JSON content from LSP message format
-    const match = message.match(/Content-Length: (\d+)\r\n\r\n(.+)/);
-    if (match) {
-      const contentLength = parseInt(match[1]);
-      const jsonContent = match[2].slice(0, contentLength);
-      return jsonContent;
-    }
-
-    return undefined;
-  }
-
-  input(data: string) {
-    this.inputBuffer.push(data);
-  }
-
-  getOutput(): string[] {
-    return [...this.outputBuffer];
-  }
-
-  clearOutput() {
-    this.outputBuffer = [];
-  }
-}
-
-/**
- * Helper to create JSON-RPC request message.
- */
-function createJsonRpcMessage(method: string, params?: unknown, id?: number) {
+function createLspMessage(
+  method: string,
+  params?: unknown,
+  id?: number,
+): string {
   const message: Record<string, unknown> = {
     jsonrpc: "2.0",
     method,
@@ -71,101 +31,95 @@ function createJsonRpcMessage(method: string, params?: unknown, id?: number) {
 }
 
 /**
- * Run server for a limited number of iterations.
+ * Parse LSP message from raw string.
  */
-async function runServerLimited(mockStdio: MockStdio, maxIterations = 10) {
-  let iterations = 0;
+function parseLspMessage(raw: string): string | null {
+  const match = raw.match(/Content-Length: (\d+)\r\n\r\n(.+)/);
+  if (!match) return null;
 
-  while (iterations < maxIterations) {
-    const message = mockStdio.read();
-    if (!message) {
-      await new Promise((resolve) => setTimeout(resolve, 10));
-      iterations++;
-      continue;
-    }
-
-    try {
-      const request = JSON.parse(message);
-      // Simulate server processing
-      if (request.method === "initialize") {
-        const response = {
-          jsonrpc: "2.0",
-          id: request.id,
-          result: {
-            capabilities: {
-              definitionProvider: true,
-            },
-          },
-        };
-        const content = JSON.stringify(response);
-        mockStdio.write(`Content-Length: ${content.length}\r\n\r\n${content}`);
-      } else if (request.method === "textDocument/definition") {
-        const response = {
-          jsonrpc: "2.0",
-          id: request.id,
-          result: null,
-        };
-        const content = JSON.stringify(response);
-        mockStdio.write(`Content-Length: ${content.length}\r\n\r\n${content}`);
-      }
-      break; // Exit after processing one request
-    } catch (error) {
-      console.error("Failed to parse JSON-RPC message:", error);
-    }
-
-    iterations++;
-  }
+  const contentLength = parseInt(match[1]);
+  return match[2].slice(0, contentLength);
 }
 
-Deno.test("LSP Server - initialize request", async () => {
-  const mockStdio = new MockStdio();
+/**
+ * Create JSON-RPC response for LSP method.
+ */
+function createLspResponse(
+  method: string,
+  id?: number,
+): Record<string, unknown> & { result?: unknown } {
+  if (method === "initialize") {
+    return {
+      jsonrpc: "2.0",
+      id,
+      result: {
+        capabilities: {
+          definitionProvider: true,
+        },
+      },
+    };
+  } else if (method === "textDocument/definition") {
+    return {
+      jsonrpc: "2.0",
+      id,
+      result: null,
+    };
+  }
 
-  // Send initialize request
-  const initializeRequest = createJsonRpcMessage("initialize", {
+  return {
+    jsonrpc: "2.0",
+    id,
+  };
+}
+
+Deno.test("LSP Server - initialize request", () => {
+  const method = "initialize";
+  const params = {
     processId: null,
     rootUri: "file:///test",
     capabilities: {},
-  }, 1);
+  };
 
-  mockStdio.input(initializeRequest);
+  // Create request
+  const request = createLspMessage(method, params, 1);
+  assertStringIncludes(request, "Content-Length:");
+  assertStringIncludes(request, '"jsonrpc":"2.0"');
 
-  // Run limited server simulation
-  await runServerLimited(mockStdio);
-
-  // Check response
-  const output = mockStdio.getOutput().join("");
-  assertStringIncludes(output, "Content-Length:");
-  assertStringIncludes(output, '"jsonrpc":"2.0"');
-  assertStringIncludes(output, '"id":1');
-
-  // Parse the response
-  const contentMatch = output.match(/Content-Length: (\d+)\r\n\r\n(.+)/);
-  if (contentMatch) {
-    const responseJson = JSON.parse(contentMatch[2]);
-    assertEquals(responseJson.result.capabilities.definitionProvider, true);
+  // Parse request
+  const parsed = parseLspMessage(request);
+  if (parsed) {
+    const json = JSON.parse(parsed);
+    assertEquals(json.method, "initialize");
+    assertEquals(json.id, 1);
   }
+
+  // Create and verify response
+  const response = createLspResponse(method, 1);
+  const result = response.result as Record<string, Record<string, unknown>>;
+  assertEquals(result.capabilities?.definitionProvider, true);
 });
 
-Deno.test("LSP Server - textDocument/definition request", async () => {
-  const mockStdio = new MockStdio();
-
-  // Send textDocument/definition request
-  const definitionRequest = createJsonRpcMessage("textDocument/definition", {
+Deno.test("LSP Server - textDocument/definition request", () => {
+  const method = "textDocument/definition";
+  const params = {
     textDocument: { uri: "file:///test.md" },
     position: { line: 0, character: 10 },
-  }, 2);
+  };
 
-  mockStdio.input(definitionRequest);
+  // Create request
+  const request = createLspMessage(method, params, 2);
+  assertStringIncludes(request, "Content-Length:");
+  assertStringIncludes(request, '"id":2');
 
-  // Run limited server simulation
-  await runServerLimited(mockStdio);
+  // Parse request
+  const parsed = parseLspMessage(request);
+  if (parsed) {
+    const json = JSON.parse(parsed);
+    assertEquals(json.method, "textDocument/definition");
+    assertEquals(json.id, 2);
+  }
 
-  // Check response
-  const output = mockStdio.getOutput().join("");
-  assertStringIncludes(output, "Content-Length:");
-  assertStringIncludes(output, '"jsonrpc":"2.0"');
-  assertStringIncludes(output, '"id":2');
-
-  // The actual location response will be tested in integration tests
-  // For now, just ensure we get a valid JSON-RPC response
+  // Create and verify response
+  const response = createLspResponse(method, 2);
+  assertEquals(response.result, null);
 });
