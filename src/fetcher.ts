@@ -90,7 +90,18 @@ export async function htmlToMarkdown(
   const result = await Defuddle(html, url, {
     markdown: true,
   });
-  return result.content;
+
+  const escapeQuote = (str: string | undefined) =>
+    str ? str.replace(/"/g, '\\"') : "";
+
+  return `---
+title: "${escapeQuote(result.title)}"
+description: "${escapeQuote(result.description)}"
+domain: "${escapeQuote(result.domain)}"
+author: "${escapeQuote(result.author)}"
+---
+
+${result.content}`;
 }
 
 /**
