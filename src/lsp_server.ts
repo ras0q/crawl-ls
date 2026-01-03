@@ -15,7 +15,7 @@ import { handleTextDocumentDefinition } from "./handlers/textDocument_definition
 /**
  * Validate and process a single JSON-RPC request and return response.
  */
-async function processRequest(
+export async function processRequest(
   request: JsonRpcRequest,
   context: LspContext,
 ): Promise<JsonRpcResponse> {

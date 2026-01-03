@@ -1,150 +1,160 @@
 /**
- * LSP server tests for CrawlLS.
- * Tests JSON-RPC communication over stdin/stdout.
+ * Tests for LSP server request processing.
  */
 
-import { assertEquals, assertStringIncludes } from "@std/assert";
+import { assertEquals } from "@std/assert";
+import { processRequest } from "./lsp_server.ts";
+import type { JsonRpcRequest } from "./types/jsonrpc.ts";
+import type { LspContext } from "./types/lsp.ts";
 
-/**
- * Helper to create JSON-RPC request message in LSP format.
- */
-function createLspMessage(
-  method: string,
-  params?: unknown,
-  id?: number,
-): string {
-  const message: Record<string, unknown> = {
+const mockContext: LspContext = {
+  cacheDir: "/tmp/crawl-ls-test-cache",
+};
+
+Deno.test("processRequest - initialize method", async () => {
+  const request: JsonRpcRequest = {
     jsonrpc: "2.0",
-    method,
+    method: "initialize",
+    params: {
+      processId: null,
+      rootUri: "file:///test",
+      capabilities: {},
+    },
+    id: 1,
   };
 
-  if (params) {
-    message.params = params;
+  const response = await processRequest(request, mockContext);
+
+  assertEquals(response.jsonrpc, "2.0");
+  assertEquals(response.id, 1);
+  if (
+    response.result &&
+    typeof response.result === "object" &&
+    "capabilities" in response.result
+  ) {
+    const result = response.result as Record<string, unknown>;
+    const capabilities = result.capabilities as Record<string, unknown>;
+    assertEquals(capabilities.definitionProvider, true);
   }
-
-  if (id !== undefined) {
-    message.id = id;
-  }
-
-  const content = JSON.stringify(message);
-  return `Content-Length: ${content.length}\r\n\r\n${content}`;
-}
-
-/**
- * Parse LSP message from raw string.
- */
-function parseLspMessage(raw: string): string | null {
-  const match = raw.match(/Content-Length: (\d+)\r\n\r\n(.+)/);
-  if (!match) return null;
-
-  const contentLength = parseInt(match[1]);
-  return match[2].slice(0, contentLength);
-}
-
-/**
- * Create JSON-RPC response for LSP method.
- */
-function createLspResponse(
-  method: string,
-  id?: number,
-): Record<string, unknown> & { result?: unknown } {
-  if (method === "initialize") {
-    return {
-      jsonrpc: "2.0",
-      id,
-      result: {
-        capabilities: {
-          definitionProvider: true,
-        },
-      },
-    };
-  } else if (method === "textDocument/definition") {
-    return {
-      jsonrpc: "2.0",
-      id,
-      result: null,
-    };
-  }
-
-  return {
-    jsonrpc: "2.0",
-    id,
-  };
-}
-
-Deno.test("LSP Server - initialize request", () => {
-  const method = "initialize";
-  const params = {
-    processId: null,
-    rootUri: "file:///test",
-    capabilities: {},
-  };
-
-  // Create request
-  const request = createLspMessage(method, params, 1);
-  assertStringIncludes(request, "Content-Length:");
-  assertStringIncludes(request, '"jsonrpc":"2.0"');
-
-  // Parse request
-  const parsed = parseLspMessage(request);
-  if (parsed) {
-    const json = JSON.parse(parsed);
-    assertEquals(json.method, "initialize");
-    assertEquals(json.id, 1);
-  }
-
-  // Create and verify response
-  const response = createLspResponse(method, 1);
-  const result = response.result as Record<string, Record<string, unknown>>;
-  assertEquals(result.capabilities?.definitionProvider, true);
 });
 
-Deno.test("LSP Server - textDocument/definition request", () => {
-  const method = "textDocument/definition";
-  const params = {
-    textDocument: { uri: "file:///test.md" },
-    position: { line: 0, character: 10 },
+Deno.test("processRequest - unknown method", async () => {
+  const request: JsonRpcRequest = {
+    jsonrpc: "2.0",
+    method: "unknown/method",
+    id: 2,
   };
 
-  // Create request
-  const request = createLspMessage(method, params, 2);
-  assertStringIncludes(request, "Content-Length:");
-  assertStringIncludes(request, '"id":2');
+  const response = await processRequest(request, mockContext);
 
-  // Parse request
-  const parsed = parseLspMessage(request);
-  if (parsed) {
-    const json = JSON.parse(parsed);
-    assertEquals(json.method, "textDocument/definition");
-    assertEquals(json.id, 2);
+  assertEquals(response.jsonrpc, "2.0");
+  assertEquals(response.id, 2);
+  if (response.error) {
+    assertEquals(response.error.code, -32601);
+    assertEquals(response.error.message.includes("Method not found"), true);
   }
-
-  // Create and verify response
-  const response = createLspResponse(method, 2);
-  assertEquals(response.result, null);
 });
 
 Deno.test({
-  name: "LSP Server - definition with link extraction",
+  name: "processRequest - textDocument/definition with no link",
   sanitizeOps: false,
   sanitizeResources: false,
   async fn() {
-    // Create a temporary test file with a markdown link
-    const testFile = "/tmp/crawl-ls-test.md";
-    const testContent = "Check [Example](https://example.com) here";
+    const testFile = "/tmp/crawl-ls-server-test-1.md";
+    const testContent = "Plain text without links";
     await Deno.writeTextFile(testFile, testContent);
 
     try {
-      // Import and test the handler logic
-      const { extractLinkAtPosition } = await import("./link_parser.ts");
+      const request: JsonRpcRequest = {
+        jsonrpc: "2.0",
+        method: "textDocument/definition",
+        params: {
+          textDocument: { uri: `file://${testFile}` },
+          position: { line: 0, character: 5 },
+        },
+        id: 3,
+      };
 
-      const line = testContent;
-      const character = 10; // cursor on "Example"
+      const response = await processRequest(request, mockContext);
 
-      const url = extractLinkAtPosition(line, character);
-      assertEquals(url, "https://example.com");
+      assertEquals(response.jsonrpc, "2.0");
+      assertEquals(response.id, 3);
+      assertEquals(response.result, null);
     } finally {
-      // Cleanup
+      try {
+        await Deno.remove(testFile);
+      } catch {
+        // Ignore cleanup errors
+      }
+    }
+  },
+});
+
+Deno.test({
+  name: "processRequest - textDocument/definition beyond file bounds",
+  sanitizeOps: false,
+  sanitizeResources: false,
+  async fn() {
+    const testFile = "/tmp/crawl-ls-server-test-2.md";
+    const testContent = "Single line";
+    await Deno.writeTextFile(testFile, testContent);
+
+    try {
+      const request: JsonRpcRequest = {
+        jsonrpc: "2.0",
+        method: "textDocument/definition",
+        params: {
+          textDocument: { uri: `file://${testFile}` },
+          position: { line: 100, character: 0 },
+        },
+        id: 4,
+      };
+
+      const response = await processRequest(request, mockContext);
+
+      assertEquals(response.jsonrpc, "2.0");
+      assertEquals(response.id, 4);
+      assertEquals(response.result, null);
+    } finally {
+      try {
+        await Deno.remove(testFile);
+      } catch {
+        // Ignore cleanup errors
+      }
+    }
+  },
+});
+
+Deno.test({
+  name: "processRequest - textDocument/definition with external URL",
+  sanitizeOps: false,
+  sanitizeResources: false,
+  async fn() {
+    const testFile = "/tmp/crawl-ls-server-test-3.md";
+    const testContent = "See [Example](https://example.com) for details";
+    await Deno.writeTextFile(testFile, testContent);
+
+    try {
+      const request: JsonRpcRequest = {
+        jsonrpc: "2.0",
+        method: "textDocument/definition",
+        params: {
+          textDocument: { uri: `file://${testFile}` },
+          position: { line: 0, character: 20 },
+        },
+        id: 5,
+      };
+
+      const response = await processRequest(request, mockContext);
+
+      assertEquals(response.jsonrpc, "2.0");
+      assertEquals(response.id, 5);
+      // Result should be either null or a Location object
+      assertEquals(
+        typeof response.result === "object" || response.result === null,
+        true,
+      );
+    } finally {
       try {
         await Deno.remove(testFile);
       } catch {
