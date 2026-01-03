@@ -27,15 +27,20 @@ Deno.test("processRequest - initialize method", async () => {
 
   assertEquals(response.jsonrpc, "2.0");
   assertEquals(response.id, 1);
-  if (
-    response.result &&
-    typeof response.result === "object" &&
-    "capabilities" in response.result
-  ) {
-    const result = response.result as Record<string, unknown>;
-    const capabilities = result.capabilities as Record<string, unknown>;
-    assertEquals(capabilities.definitionProvider, true);
-  }
+  assertEquals(response.error, undefined);
+
+  const { result } = response;
+  assertEquals(
+    typeof result === "object" &&
+      result &&
+      "capabilities" in result &&
+      typeof result.capabilities === "object" &&
+      result.capabilities &&
+      "definitionProvider" in result.capabilities &&
+      typeof result.capabilities.definitionProvider === "boolean" &&
+      result.capabilities.definitionProvider === true,
+    true,
+  );
 });
 
 Deno.test("processRequest - unknown method", async () => {
@@ -49,10 +54,10 @@ Deno.test("processRequest - unknown method", async () => {
 
   assertEquals(response.jsonrpc, "2.0");
   assertEquals(response.id, 2);
-  if (response.error) {
-    assertEquals(response.error.code, -32601);
-    assertEquals(response.error.message.includes("Method not found"), true);
-  }
+  assertEquals(response.result, undefined);
+  assertEquals(response.error !== undefined, true);
+  assertEquals(response.error!.code, -32601);
+  assertEquals(response.error!.message.includes("Method not found"), true);
 });
 
 Deno.test({

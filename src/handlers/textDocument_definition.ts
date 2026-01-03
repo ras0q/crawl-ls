@@ -11,7 +11,6 @@ import type { LspContext } from "../types/lsp.ts";
 import { extractLinkAtPosition } from "../link_parser.ts";
 import { checkCache } from "../cache.ts";
 import { fetchUrl } from "../fetcher.ts";
-import { writeMessage } from "../io/message.ts";
 
 /**
  * Handle textDocument/definition request.
@@ -20,6 +19,7 @@ export async function handleTextDocumentDefinition(
   request: JsonRpcRequest,
   context: LspContext,
 ): Promise<JsonRpcResponse> {
+  // TODO: Validate request params
   const params = request.params as DefinitionParams;
 
   // Get document URI and position
@@ -62,16 +62,17 @@ export async function handleTextDocumentDefinition(
     const fetchResult = await fetchUrl(url, context.cacheDir);
 
     if (fetchResult.isExternal) {
+      // TODO: implement
       // Send window/showDocument request for external URLs
-      const showDocRequest = {
-        jsonrpc: "2.0",
-        method: "window/showDocument",
-        params: {
-          uri: url,
-          external: true,
-        },
-      };
-      writeMessage(showDocRequest);
+      // const showDocRequest: JsonRpcResponse = {
+      //   jsonrpc: "2.0",
+      //   method: "window/showDocument",
+      //   params: {
+      //     uri: url,
+      //     external: true,
+      //   },
+      // };
+      // writeMessage(showDocRequest);
 
       // Return null for the definition
       return {

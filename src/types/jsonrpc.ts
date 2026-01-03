@@ -6,9 +6,9 @@ import { type } from "arktype";
 
 export const JsonRpcRequest = type({
   jsonrpc: "string",
+  id: "number | string",
   method: "string",
-  "params?": "unknown",
-  "id?": "number",
+  "params?": "object | object[]",
 });
 export type JsonRpcRequest = typeof JsonRpcRequest.infer;
 
@@ -19,7 +19,7 @@ const JsonRpcError = type({
 
 export const JsonRpcResponse = type({
   jsonrpc: "string",
-  "id?": "number",
+  id: "number | string | null",
   "result?": "unknown",
   "error?": JsonRpcError,
 });

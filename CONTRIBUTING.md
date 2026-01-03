@@ -69,8 +69,10 @@ deno task dev
 - Write tests before implementation (TDD approach)
 - Test pure functions individually for better coverage
 - Run tests with: `deno test -P`
-  - Use the `-P` flag to apply default permissions from `deno.jsonc`: `deno test -P`
-  - This enables tests to run with configured permissions (file access, env access, etc.)
+  - Use the `-P` flag to apply default permissions from `deno.jsonc`:
+    `deno test -P`
+  - This enables tests to run with configured permissions (file access, env
+    access, etc.)
 - All tests must pass before submitting a PR
 
 ### Development Logs
