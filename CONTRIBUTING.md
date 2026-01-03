@@ -43,6 +43,16 @@ deno task dev
 - Follow Kent Beck's principles: TDD, simplicity ("Do the Simplest Thing That
   Could Possibly Work"), YAGNI
 
+### Type Checking and Type Guards
+
+- **Never use `as` for type casting**: Use runtime type checks instead
+  - ✅ Good: `typeof value === "object" && "property" in value`
+  - ✅ Good: `value instanceof SomeClass`
+  - ❌ Bad: `value as SomeType`
+- Type guards should be explicit and runtime-safe
+- Prefer `typeof` and `in` operator for object property checking
+- Use `instanceof` for class instance checking with arktype validators
+
 ### Dependency Management
 
 - **Always use `deno add` command** to add dependencies, never edit `deno.jsonc`

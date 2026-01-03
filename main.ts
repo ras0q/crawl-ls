@@ -4,7 +4,8 @@
  */
 
 import { parseArgs } from "@std/cli/parse-args";
-import { type LspContext, startLspServer } from "./src/lsp_server.ts";
+import type { LspContext } from "./src/types/lsp.ts";
+import { startLspServer } from "./src/lsp_server.ts";
 
 const DEFAULT_CACHE_DIR = "/tmp/crawl-ls";
 
