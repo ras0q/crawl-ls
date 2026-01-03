@@ -1,126 +1,127 @@
 # LSP Server Architecture Refactoring
 
-## 概要
+## Overview
 
-LSP
-サーバーのアーキテクチャを責務分離原則に基づいて大規模リファクタリングしました。特に型定義、I/O
-処理、ビジネスロジックを明確に分離し、保守性と再利用性を向上させました。
+Performed a major refactoring of the LSP server architecture based on the
+separation of concerns principle. Specifically separated type definitions, I/O
+processing, and business logic to improve maintainability and reusability.
 
-## 実装内容
+## Implementation Details
 
-### 1. ハンドラーの分割と整理
+### 1. Handler Organization and Restructuring
 
-**ファイル構成：**
+**File Structure:**
 
 ```
 src/handlers/
-├── initialize.ts                    # initialize メソッド処理
-├── initialize_test.ts               # initialize のテスト
-├── textDocument_definition.ts        # textDocument/definition メソッド処理
-└── textDocument_definition_test.ts   # textDocument/definition のテスト
+├── initialize.ts                    # initialize method handling
+├── initialize_test.ts               # initialize tests
+├── textDocument_definition.ts        # textDocument/definition method handling
+└── textDocument_definition_test.ts   # textDocument/definition tests
 ```
 
-**実装内容：**
+**Implementation:**
 
-- メソッド名をファイル名に反映（`definition.ts` → `textDocument_definition.ts`）
-- 各ハンドラーは `JsonRpcResponse` を返す（I/O 処理なし）
-- ビジネスロジックのみに専念
+- Reflect method names in filenames (`definition.ts` →
+  `textDocument_definition.ts`)
+- Each handler returns `JsonRpcResponse` (no I/O operations)
+- Focus on business logic only
 
-**テスト追加：**
+**Tests Added:**
 
-- `initialize_test.ts`：2 つのテストケース
-  - ID 有りの initialize リクエスト
-  - ID なしの initialize リクエスト
-- `textDocument_definition_test.ts`：3 つのテストケース
-  - リンクが見つからない場合
-  - 行位置が範囲外の場合
-  - 有効なリンクがある場合
+- `initialize_test.ts`: 2 test cases
+  - initialize request with ID
+  - initialize request without ID
+- `textDocument_definition_test.ts`: 3 test cases
+  - No link found
+  - Position beyond line bounds
+  - Valid link found
 
-### 2. メッセージング機能の統合
+### 2. Messaging Functionality Integration
 
-**従来の問題：**
-
-```
-readMessage() を startLspServer で、writeMessage() を processRequest で呼び出し
-→ メッセージ I/O が分散している
-```
-
-**改善後：**
+**Previous Problem:**
 
 ```
-startLspServer で readMessage() と writeMessage() の両方を呼び出し
-→ メッセージの読み書きが統一
+readMessage() called in startLspServer, writeMessage() called in processRequest
+→ Message I/O operations scattered
 ```
 
-### 3. 型定義とロジックの分離（パターン A）
+**After Improvement:**
 
-**ファイル構成：**
+```
+Both readMessage() and writeMessage() called in startLspServer
+→ Message I/O operations unified
+```
+
+### 3. Type Definitions and Logic Separation (Pattern A)
+
+**File Structure:**
 
 ```
 src/
 ├── types/
-│   ├── jsonrpc.ts                 # JSON-RPC ジェネリック型定義
-│   └── lsp.ts                     # LSP 固有の型（LspContext）
+│   ├── jsonrpc.ts                 # JSON-RPC generic type definitions
+│   └── lsp.ts                     # LSP-specific types (LspContext)
 ├── io/
-│   └── message.ts                 # JSON-RPC メッセージ I/O
-└── lsp_server.ts                  # メインロジック
+│   └── message.ts                 # JSON-RPC message I/O
+└── lsp_server.ts                  # Main logic
 ```
 
-**各ファイルの責務：**
+**Responsibilities of Each File:**
 
-- `types/jsonrpc.ts`：JSON-RPC プロトコルの型定義とバリデーター
+- `types/jsonrpc.ts`: JSON-RPC protocol type definitions and validators
   - JsonRpcRequest, JsonRpcResponse
-  - arktype を使用した実行時バリデーション
-  - 他プロジェクトで再利用可能
+  - Runtime validation using arktype
+  - Reusable in other projects
 
-- `types/lsp.ts`：LSP サーバー固有の型定義
-  - LspContext インターフェース
-  - キャッシュディレクトリ設定
+- `types/lsp.ts`: LSP server-specific type definitions
+  - LspContext interface
+  - Cache directory configuration
 
-- `io/message.ts`：JSON-RPC メッセージの読み書き
-  - readMessage()：stdin からメッセージを読み込み
-  - writeMessage()：stdout へレスポンスを送信
+- `io/message.ts`: JSON-RPC message read/write operations
+  - readMessage(): Read messages from stdin
+  - writeMessage(): Send responses to stdout
 
-- `lsp_server.ts`：メインサーバーロジック
-  - リクエスト検証
-  - ハンドラー呼び出し
-  - エラーハンドリング
+- `lsp_server.ts`: Main server logic
+  - Request validation
+  - Handler invocation
+  - Error handling
 
-### 4. エラーハンドリングの階層化
+### 4. Layered Error Handling
 
-**階層：**
+**Layers:**
 
-1. `startLspServer`：JSON パース エラー
-2. `processRequest`：ハンドラー実行時エラー（try-catch）
-3. ハンドラー：ビジネスロジック（エラーは上層に委譲）
+1. `startLspServer`: JSON parsing errors
+2. `processRequest`: Handler runtime errors (try-catch)
+3. Handlers: Business logic (errors delegated to upper layers)
 
-**エラーコード：**
+**Error Codes:**
 
-- `-32601`：メソッド未実装
-- `-32603`：ハンドラー実行時内部エラー
+- `-32601`: Method not found
+- `-32603`: Internal handler runtime error
 
-### 5. 型チェックガイドラインの追加
+### 5. Type Checking Guidelines Added
 
-AGENTS.md に以下を記載：
+Recorded in AGENTS.md:
 
 ```
-- `as` による型キャストを禁止
-- `typeof` と `in` 演算子による runtime type check を推奨
-- arktype の `instanceof type.errors` による検証
+- Prohibit type casting using `as`
+- Recommend runtime type checks using `typeof` and `in` operators
+- Use `instanceof type.errors` for arktype validation
 ```
 
-## アーキテクチャの改善点
+## Architecture Improvements
 
-### 責務の分離
+### Separation of Concerns
 
-| レイヤー         | 責務                   | ファイル        |
-| ---------------- | ---------------------- | --------------- |
-| I/O              | メッセージ読み書き     | `io/message.ts` |
-| ビジネスロジック | リクエスト処理         | `lsp_server.ts` |
-| ハンドラー       | LSP メソッド実装       | `handlers/*.ts` |
-| 型定義           | 型定義・バリデーション | `types/*.ts`    |
+| Layer            | Responsibility       | File            |
+| ---------------- | -------------------- | --------------- |
+| I/O              | Message read/write   | `io/message.ts` |
+| Business Logic   | Request processing   | `lsp_server.ts` |
+| Handlers         | LSP method handling  | `handlers/*.ts` |
+| Type Definitions | Types and validation | `types/*.ts`    |
 
-### 依存関係（一方向）
+### Dependency Graph (Unidirectional)
 
 ```
 handlers/ → types/ → io/
@@ -128,57 +129,58 @@ lsp_server.ts → handlers/, types/, io/
 main.ts → lsp_server.ts, types/lsp.ts
 ```
 
-## テスト結果
+## Test Results
 
-✅ **全 23 テスト合格**
+✅ **All 23 tests passed**
 
 ```
-- cache_test.ts: 2 テスト
-- fetcher_test.ts: 7 テスト
-- handlers/initialize_test.ts: 2 テスト（新規）
-- handlers/textDocument_definition_test.ts: 3 テスト（新規）
-- link_parser_test.ts: 6 テスト
-- lsp_server_test.ts: 3 テスト
+- cache_test.ts: 2 tests
+- fetcher_test.ts: 7 tests
+- handlers/initialize_test.ts: 2 tests (new)
+- handlers/textDocument_definition_test.ts: 3 tests (new)
+- link_parser_test.ts: 6 tests
+- lsp_server_test.ts: 3 tests
 ```
 
-✅ **カバレッジ**
+✅ **Coverage**
 
 - handlers/initialize.ts: 100%
 - handlers/textDocument_definition.ts: 68.3%
 - types/jsonrpc.ts: 100%
 - link_parser.ts: 100%
-- 全体: 70.8%
+- Overall: 70.8%
 
-✅ **品質チェック**
+✅ **Quality Checks**
 
-- Deno フォーマット：合格
-- Deno リント：合格
-- 型チェック：合格
+- Deno format: ✓
+- Deno lint: ✓
+- Type checking: ✓
 
-## 技術的な決定
+## Technical Decisions
 
-### 1. パターン A を選択した理由
+### 1. Why Pattern A Was Chosen
 
-- **再利用性**：JSON-RPC 型定義が独立している
-- **保守性**：ファイルサイズが適切、責務が明確
-- **拡張性**：新しいハンドラーやメソッド追加が容易
-- **テスト性**：各要素を独立してテスト可能
+- **Reusability**: JSON-RPC type definitions are independent
+- **Maintainability**: Appropriate file sizes, clear responsibilities
+- **Extensibility**: Easy to add new handlers and methods
+- **Testability**: Each component can be tested independently
 
-### 2. validator の別名インポート
+### 2. Aliased Validator Imports
 
 ```typescript
 import { JsonRpcRequest as JsonRpcRequestValidator } from "./types/jsonrpc.ts";
 ```
 
-型定義と実行時バリデーターを区別するため。
+To distinguish type definitions from runtime validators.
 
-### 3. I/O の統一
+### 3. Unified I/O Operations
 
-`startLspServer` で読み書きを行うことで、メッセージング管理が一箇所に集約。
+Both read and write operations in `startLspServer` consolidates messaging
+management in one place.
 
-## ファイル変更サマリー
+## File Changes Summary
 
-**新規作成：**
+**Files Created:**
 
 - `src/types/jsonrpc.ts`
 - `src/types/lsp.ts`
@@ -187,43 +189,47 @@ import { JsonRpcRequest as JsonRpcRequestValidator } from "./types/jsonrpc.ts";
 - `src/handlers/textDocument_definition_test.ts`
 - `ARCHITECTURE.md`
 
-**リネーム：**
+**Files Renamed:**
 
 - `src/handlers/definition.ts` → `src/handlers/textDocument_definition.ts`
 - `src/handlers/definition_test.ts` →
   `src/handlers/textDocument_definition_test.ts`
 
-**削除：**
+**Files Deleted:**
 
-- `src/message.ts`（機能を `types/jsonrpc.ts` と `io/message.ts` に分割）
-- `src/handlers/index.ts`（直接インポートに変更）
+- `src/message.ts` (functionality split into `types/jsonrpc.ts` and
+  `io/message.ts`)
+- `src/handlers/index.ts` (changed to direct imports)
 
-**修正：**
+**Files Modified:**
 
-- `src/lsp_server.ts`：新しい型構成に対応
-- `src/handlers/initialize.ts`：インポートパス修正
-- `src/handlers/textDocument_definition.ts`：インポートパス修正
-- `main.ts`：LspContext のインポート元を message.ts から types/lsp.ts に変更
+- `src/lsp_server.ts`: Updated for new type structure
+- `src/handlers/initialize.ts`: Fixed import paths
+- `src/handlers/textDocument_definition.ts`: Fixed import paths
+- `main.ts`: Changed LspContext import from message.ts to types/lsp.ts
 
-## 学習ポイント
+## Learning Points
 
-1. **責務分離の重要性**：型定義、I/O、ロジックを分離することで保守性が大幅に向上
-2. **ファイル構成の設計**：関連ファイルをディレクトリにまとめ、依存関係を明確にする
-3. **型安全性**：arktype を活用した runtime validation で type safety を実現
+1. **Importance of Separation of Concerns**: Separating type definitions, I/O,
+   and logic significantly improves maintainability
+2. **File Structure Design**: Group related files in directories and clarify
+   dependencies
+3. **Type Safety**: Achieve type safety using runtime validation with arktype
 
-## 今後の拡張性
+## Future Extensibility
 
-現在のアーキテクチャであれば、以下の拡張が容易：
+With the current architecture, the following extensions are easy to implement:
 
-- 新しい LSP メソッドハンドラーの追加（`src/handlers/` に新規ファイル）
-- 新しいメッセージ型の定義（`src/types/` に追加）
-- カスタムバリデーションルール（`src/types/jsonrpc.ts` に追加）
-- 他プロジェクトでの JSON-RPC 型定義の再利用
+- Add new LSP method handlers (create new files in `src/handlers/`)
+- Define new message types (add to `src/types/`)
+- Add custom validation rules (update `src/types/jsonrpc.ts`)
+- Reuse JSON-RPC type definitions in other projects
 
-## 結論
+## Conclusion
 
-責務分離原則に基づいたアーキテクチャリファクタリングにより、以下を実現：
+Architecture refactoring based on separation of concerns principle achieved:
 
-✅ 保守性向上（各ファイルの責務が明確） ✅ 再利用性向上（JSON-RPC 部分が独立）
-✅ テスト性向上（ユニットテスト追加） ✅ 拡張性向上（新機能追加が容易） ✅
-コード品質向上（全テスト合格、型チェック合格）
+✅ Improved maintainability (clear responsibilities for each file) ✅ Improved
+reusability (JSON-RPC part is independent) ✅ Improved testability (added unit
+tests) ✅ Improved extensibility (easy to add new features) ✅ Improved code
+quality (all tests passed, type checking passed)
