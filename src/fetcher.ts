@@ -5,12 +5,9 @@
  */
 
 import { Defuddle } from "defuddle/node";
-import { join } from "@std/path";
-import { ensureDir } from "@std/fs";
-import { createHash } from "node:crypto";
 
 export interface FetchResult {
-  path: string;
+  content: string;
   isExternal: boolean;
 }
 
@@ -30,36 +27,6 @@ const EXTERNAL_PATTERNS = [
  */
 export function isExternalUrl(url: string): boolean {
   return EXTERNAL_PATTERNS.some((pattern) => pattern.test(url));
-}
-
-/**
- * Generate a hash from a URL for cache filename.
- */
-export function generateCacheHash(url: string): string {
-  return createHash("sha256").update(url).digest("hex");
-}
-
-/**
- * Get the cache file path for a given URL.
- */
-export function getCachePath(url: string, cacheDir: string): string {
-  const hash = generateCacheHash(url);
-  const filename = `${hash}.md`;
-  return join(cacheDir, filename);
-}
-
-/**
- * Save content to cache directory.
- */
-export async function saveToCache(
-  url: string,
-  content: string,
-  cacheDir: string,
-): Promise<string> {
-  await ensureDir(cacheDir);
-  const filepath = getCachePath(url, cacheDir);
-  await Deno.writeTextFile(filepath, content);
-  return filepath;
 }
 
 /**
@@ -117,28 +84,17 @@ export function isContentTooShort(content: string): boolean {
  *
  * This is the main entry point for the fetcher functionality.
  */
-export async function fetchUrl(
-  url: string,
-  cacheDir: string,
-): Promise<FetchResult> {
-  // Check if URL matches external patterns
+export async function fetchUrl(url: string): Promise<FetchResult> {
   if (isExternalUrl(url)) {
-    return { path: "", isExternal: true };
+    return { content: "", isExternal: true };
   }
 
-  // Fetch HTML
   const html = await fetchHtml(url);
-
-  // Convert to Markdown
   const markdown = await htmlToMarkdown(html, url);
 
-  // Check content length heuristic
   if (isContentTooShort(markdown)) {
-    return { path: "", isExternal: true };
+    return { content: "", isExternal: true };
   }
 
-  // Save to cache
-  const cachePath = await saveToCache(url, markdown, cacheDir);
-
-  return { path: cachePath, isExternal: false };
+  return { content: markdown, isExternal: false };
 }

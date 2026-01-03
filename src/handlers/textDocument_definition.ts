@@ -10,7 +10,7 @@ import type { JsonRpcRequest } from "../types/jsonrpc.ts";
 import type { HandlerOutput } from "../types/handler.ts";
 import type { LspContext } from "../types/lsp.ts";
 import { extractLinkAtPosition } from "../link_parser.ts";
-import { checkCache } from "../cache.ts";
+import { checkCache, getCachePath, saveToCache } from "../cache.ts";
 import { fetchUrl } from "../fetcher.ts";
 
 /**
@@ -60,11 +60,12 @@ export async function handleTextDocumentDefinition(
   }
 
   // Check cache first
-  let cachePath = await checkCache(url, context.cacheDir);
+  const cachePath = getCachePath(url, context.cacheDir);
+  const cached = await checkCache(cachePath);
 
   // If not cached, fetch it
-  if (!cachePath) {
-    const fetchResult = await fetchUrl(url, context.cacheDir);
+  if (!cached) {
+    const fetchResult = await fetchUrl(url);
 
     if (fetchResult.isExternal) {
       // Send window/showDocument request for external URLs
@@ -85,7 +86,7 @@ export async function handleTextDocumentDefinition(
       };
     }
 
-    cachePath = fetchResult.path;
+    await saveToCache(cachePath, fetchResult.content);
   }
 
   // Return location of cached markdown file
