@@ -192,21 +192,46 @@ async function processRequest(request: JsonRpcRequest) {
  * Read a single LSP message from stdin.
  */
 async function readMessage(): Promise<string | null> {
-  const buf = new Uint8Array(1024);
-  const n = await Deno.stdin.read(buf);
-  if (n === null) return null;
-
   const decoder = new TextDecoder();
-  const chunk = decoder.decode(buf.slice(0, n));
+  let buffer = "";
+  let contentLength = 0;
+  let headerParsed = false;
 
-  // Parse Content-Length header and extract message
-  const match = chunk.match(/Content-Length: (\d+)\r\n\r\n(.+)/);
-  if (match) {
-    const contentLength = parseInt(match[1]);
-    return match[2].slice(0, contentLength);
+  // First, read the headers and find Content-Length
+  while (!headerParsed) {
+    const chunk = new Uint8Array(512);
+    const bytesRead = await Deno.stdin.read(chunk);
+    if (bytesRead === null) return null;
+
+    buffer += decoder.decode(chunk.slice(0, bytesRead));
+
+    // Look for end of headers (\r\n\r\n)
+    const headerEndIdx = buffer.indexOf("\r\n\r\n");
+    if (headerEndIdx !== -1) {
+      const headers = buffer.substring(0, headerEndIdx);
+      buffer = buffer.substring(headerEndIdx + 4); // Remove headers and separator
+
+      // Parse Content-Length
+      const match = headers.match(/Content-Length: (\d+)/);
+      if (match) {
+        contentLength = parseInt(match[1]);
+        headerParsed = true;
+      } else {
+        return null; // No Content-Length header found
+      }
+    }
   }
 
-  return null;
+  // Now read the exact amount of content specified by Content-Length
+  while (buffer.length < contentLength) {
+    const chunk = new Uint8Array(512);
+    const bytesRead = await Deno.stdin.read(chunk);
+    if (bytesRead === null) return null;
+
+    buffer += decoder.decode(chunk.slice(0, bytesRead));
+  }
+
+  return buffer.substring(0, contentLength);
 }
 
 /**
