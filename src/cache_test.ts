@@ -14,15 +14,19 @@ function generateCacheHash(url: string): string {
   return createHash("sha256").update(url).digest("hex");
 }
 
-function getCachePath(url: string): string {
+function getCachePath(url: string, cacheDir: string): string {
   const hash = generateCacheHash(url);
   const filename = `${hash}.md`;
-  return join(CACHE_DIR, filename);
+  return join(cacheDir, filename);
 }
 
-async function saveToCache(url: string, content: string): Promise<string> {
-  await ensureDir(CACHE_DIR);
-  const filepath = getCachePath(url);
+async function saveToCache(
+  url: string,
+  content: string,
+  cacheDir: string,
+): Promise<string> {
+  await ensureDir(cacheDir);
+  const filepath = getCachePath(url, cacheDir);
   await Deno.writeTextFile(filepath, content);
   return filepath;
 }
@@ -36,10 +40,10 @@ Deno.test({
     const content = "# Test Content\n\nThis is a test.";
 
     // Create cache file
-    await saveToCache(testUrl, content);
+    await saveToCache(testUrl, content, CACHE_DIR);
 
     // Check if cached
-    const result = await checkCache(testUrl);
+    const result = await checkCache(testUrl, CACHE_DIR);
     assertEquals(typeof result, "string");
     assertEquals(result?.endsWith(".md"), true);
   },
@@ -52,7 +56,7 @@ Deno.test({
   async fn() {
     const testUrl = "https://never-cached-url-12345.com";
 
-    const result = await checkCache(testUrl);
+    const result = await checkCache(testUrl, CACHE_DIR);
     assertEquals(result, null);
   },
 });

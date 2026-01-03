@@ -30,6 +30,10 @@ interface JsonRpcResponse {
   };
 }
 
+export interface LspContext {
+  cacheDir: string;
+}
+
 /**
  * Write a JSON-RPC response to stdout.
  */
@@ -61,7 +65,7 @@ function handleInitialize(request: JsonRpcRequest) {
 /**
  * Handle textDocument/definition request.
  */
-async function handleDefinition(request: JsonRpcRequest) {
+async function handleDefinition(request: JsonRpcRequest, context: LspContext) {
   const params = request.params as DefinitionParams;
 
   try {
@@ -102,11 +106,11 @@ async function handleDefinition(request: JsonRpcRequest) {
     }
 
     // Check cache first
-    let cachePath = await checkCache(url);
+    let cachePath = await checkCache(url, context.cacheDir);
 
     // If not cached, fetch it
     if (!cachePath) {
-      const fetchResult = await fetchUrl(url);
+      const fetchResult = await fetchUrl(url, context.cacheDir);
 
       if (fetchResult.isExternal) {
         // Send window/showDocument request for external URLs
@@ -163,13 +167,16 @@ async function handleDefinition(request: JsonRpcRequest) {
 /**
  * Process a single JSON-RPC request.
  */
-async function processRequest(request: JsonRpcRequest) {
+async function processRequest(
+  request: JsonRpcRequest,
+  context: LspContext,
+) {
   switch (request.method) {
     case "initialize":
       handleInitialize(request);
       break;
     case "textDocument/definition":
-      await handleDefinition(request);
+      await handleDefinition(request, context);
       break;
     default:
       // Unknown method - send error response
@@ -237,7 +244,7 @@ async function readMessage(): Promise<string | null> {
 /**
  * Start the LSP server.
  */
-export async function startLspServer() {
+export async function startLspServer(context: LspContext) {
   while (true) {
     const message = await readMessage();
     if (!message) {
@@ -247,7 +254,7 @@ export async function startLspServer() {
 
     try {
       const request: JsonRpcRequest = JSON.parse(message);
-      await processRequest(request);
+      await processRequest(request, context);
     } catch (error) {
       // Invalid JSON - ignore or send error response
       console.error("Failed to parse JSON-RPC message:", error);

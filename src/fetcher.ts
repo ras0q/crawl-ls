@@ -15,7 +15,6 @@ export interface FetchResult {
 }
 
 const MIN_CONTENT_LENGTH = 200;
-const CACHE_DIR = "/tmp/crawl-ls";
 
 // Blocklist patterns for external resources
 const EXTERNAL_PATTERNS = [
@@ -43,10 +42,10 @@ export function generateCacheHash(url: string): string {
 /**
  * Get the cache file path for a given URL.
  */
-export function getCachePath(url: string): string {
+export function getCachePath(url: string, cacheDir: string): string {
   const hash = generateCacheHash(url);
   const filename = `${hash}.md`;
-  return join(CACHE_DIR, filename);
+  return join(cacheDir, filename);
 }
 
 /**
@@ -55,9 +54,10 @@ export function getCachePath(url: string): string {
 export async function saveToCache(
   url: string,
   content: string,
+  cacheDir: string,
 ): Promise<string> {
-  await ensureDir(CACHE_DIR);
-  const filepath = getCachePath(url);
+  await ensureDir(cacheDir);
+  const filepath = getCachePath(url, cacheDir);
   await Deno.writeTextFile(filepath, content);
   return filepath;
 }
@@ -117,7 +117,10 @@ export function isContentTooShort(content: string): boolean {
  *
  * This is the main entry point for the fetcher functionality.
  */
-export async function fetchUrl(url: string): Promise<FetchResult> {
+export async function fetchUrl(
+  url: string,
+  cacheDir: string,
+): Promise<FetchResult> {
   // Check if URL matches external patterns
   if (isExternalUrl(url)) {
     return { path: "", isExternal: true };
@@ -135,7 +138,7 @@ export async function fetchUrl(url: string): Promise<FetchResult> {
   }
 
   // Save to cache
-  const cachePath = await saveToCache(url, markdown);
+  const cachePath = await saveToCache(url, markdown, cacheDir);
 
   return { path: cachePath, isExternal: false };
 }

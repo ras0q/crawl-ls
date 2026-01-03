@@ -9,6 +9,8 @@ import {
 } from "./fetcher.ts";
 import { exists } from "@std/fs";
 
+const CACHE_DIR = "/tmp/crawl-ls";
+
 Deno.test({
   name: "fetchUrl should fetch a URL and create a Markdown file",
   sanitizeOps: false,
@@ -17,7 +19,7 @@ Deno.test({
     // Use a URL with more substantial content
     const testUrl = "https://en.wikipedia.org/wiki/Test-driven_development";
 
-    const result = await fetchUrl(testUrl);
+    const result = await fetchUrl(testUrl, CACHE_DIR);
 
     // Assert that the result is not marked as external
     assertEquals(result.isExternal, false, `URL was marked as external`);
@@ -74,7 +76,7 @@ Deno.test("generateCacheHash should generate consistent hashes", () => {
 
 Deno.test("getCachePath should return correct path format", () => {
   const url = "https://example.com/test";
-  const path = getCachePath(url);
+  const path = getCachePath(url, CACHE_DIR);
 
   assertEquals(path.includes("/tmp/crawl-ls/"), true);
   assertEquals(path.endsWith(".md"), true);
