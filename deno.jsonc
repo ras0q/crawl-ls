@@ -1,7 +1,7 @@
 {
   "$schema": "https://raw.githubusercontent.com/denoland/deno/refs/heads/main/cli/schemas/config-file.v1.json",
   "name": "@ras0q/web-ls",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "exports": "./main.ts",
   "tasks": {
     // NOTE: cannot use `-P` flag due to warning
