@@ -1,7 +1,8 @@
 {
   "$schema": "https://raw.githubusercontent.com/denoland/deno/refs/heads/main/cli/schemas/config-file.v1.json",
   "tasks": {
-    "dev": "deno run -P main.ts",
+    // NOTE: cannot use `-P` flag due to warning
+    "dev": "deno run -A main.ts",
     "test": "deno test -P --coverage",
     "check": "deno fmt --check && deno lint && deno check -I --all .",
     "check:fix": "deno fmt && deno lint --fix && deno check -I --all ."
@@ -16,11 +17,9 @@
     "@std/cli": "jsr:@std/cli@1.0.25",
     "@std/path": "jsr:@std/path@1.1.4",
     "@std/fs": "jsr:@std/fs@1.0.21",
-    "arktype": "npm:arktype@^2.1.29",
     "defuddle": "npm:defuddle@0.6.6",
     "vscode-languageserver": "npm:vscode-languageserver@^9.0.1",
-    "vscode-languageserver-protocol": "npm:vscode-languageserver-protocol@^3.17.5",
-    "vscode-languageserver-types": "npm:vscode-languageserver-types@^3.17.5"
+    "vscode-languageserver-textdocument": "npm:vscode-languageserver-textdocument@^1.0.12"
   },
   "permissions": {
     "default": {

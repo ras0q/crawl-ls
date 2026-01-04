@@ -4,41 +4,55 @@
 
 import { assertEquals } from "@std/assert";
 import { handleInitialize } from "./initialize.ts";
-import type { JsonRpcRequest } from "../types/jsonrpc.ts";
+import type { InitializeParams } from "vscode-languageserver";
+import type { LspContext } from "../types/lsp.ts";
+import type { Connection } from "vscode-languageserver";
 
-Deno.test("initialize handler - returns capabilities", () => {
-  const request: JsonRpcRequest = {
-    jsonrpc: "2.0",
-    method: "initialize",
-    id: 1,
+// Mock connection for testing
+const mockConnection: Connection = {
+  sendRequest: () => Promise.resolve(),
+  listen: () => {},
+  onInitialize: () => {},
+  onDefinition: () => {},
+} as unknown as Connection;
+
+Deno.test("initialize handler - returns capabilities", async () => {
+  const context: LspContext = {
+    cacheDir: "/tmp/test",
+    connection: mockConnection,
   };
 
-  const output = handleInitialize(request);
+  const params: InitializeParams = {
+    processId: null,
+    rootUri: null,
+    capabilities: {},
+    workspaceFolders: null,
+  };
 
-  assertEquals(output.response.jsonrpc, "2.0");
-  assertEquals(output.response.id, 1);
-  if (
-    output.response.result &&
-    typeof output.response.result === "object" &&
-    "capabilities" in output.response.result
-  ) {
-    const result = output.response.result as Record<string, unknown>;
-    const capabilities = result.capabilities as Record<string, unknown>;
-    assertEquals(capabilities.definitionProvider, true);
+  const result = await handleInitialize(params, context);
+
+  assertEquals(result.capabilities.definitionProvider, true);
+  // Check textDocumentSync structure
+  if (typeof result.capabilities.textDocumentSync === "object") {
+    assertEquals(result.capabilities.textDocumentSync.openClose, true);
   }
-  assertEquals(output.serverRequest, undefined);
 });
 
-Deno.test("initialize handler - returns handler output without server request", () => {
-  const request: JsonRpcRequest = {
-    jsonrpc: "2.0",
-    method: "initialize",
-    id: "test-id",
+Deno.test("initialize handler - returns InitializeResult type", async () => {
+  const context: LspContext = {
+    cacheDir: "/tmp/test",
+    connection: mockConnection,
   };
 
-  const output = handleInitialize(request);
+  const params: InitializeParams = {
+    processId: 1234,
+    rootUri: "file:///workspace",
+    capabilities: {},
+    workspaceFolders: null,
+  };
 
-  assertEquals(output.response.jsonrpc, "2.0");
-  assertEquals(output.response.id, "test-id");
-  assertEquals(output.serverRequest, undefined);
+  const result = await handleInitialize(params, context);
+
+  // Verify result structure matches InitializeResult
+  assertEquals(typeof result.capabilities, "object");
 });

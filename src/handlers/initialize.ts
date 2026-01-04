@@ -2,28 +2,25 @@
  * Initialize request handler for LSP server.
  */
 
-import type {
-  InitializeResult,
-  ServerCapabilities,
-} from "vscode-languageserver-protocol";
-import type { JsonRpcRequest } from "../types/jsonrpc.ts";
-import type { HandlerOutput } from "../types/handler.ts";
+import {
+  type InitializeParams,
+  type InitializeResult,
+} from "vscode-languageserver";
+import type { LspContext } from "../types/lsp.ts";
 
 /**
  * Handle initialize request.
+ * Returns server capabilities.
  */
-export function handleInitialize(request: JsonRpcRequest): HandlerOutput {
-  const result: InitializeResult = {
-    capabilities: {
-      definitionProvider: true,
-    } satisfies ServerCapabilities,
-  };
-
-  return {
-    response: {
-      jsonrpc: "2.0",
-      id: request.id,
-      result,
-    },
-  };
+export function handleInitialize(
+  _params: InitializeParams,
+  _context: LspContext,
+): Promise<InitializeResult> {
+  return new Promise<InitializeResult>((resolve) => {
+    resolve({
+      capabilities: {
+        definitionProvider: true,
+      },
+    });
+  });
 }

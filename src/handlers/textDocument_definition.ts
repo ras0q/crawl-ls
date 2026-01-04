@@ -2,12 +2,7 @@
  * textDocument/definition request handler for LSP server.
  */
 
-import type {
-  DefinitionParams,
-  Location,
-} from "vscode-languageserver-protocol";
-import type { JsonRpcRequest } from "../types/jsonrpc.ts";
-import type { HandlerOutput } from "../types/handler.ts";
+import type { DefinitionParams, Location } from "vscode-languageserver";
 import type { LspContext } from "../types/lsp.ts";
 import { extractLinkAtPosition } from "../link_parser.ts";
 import { checkCache, getCachePath, saveToCache } from "../cache.ts";
@@ -15,15 +10,12 @@ import { fetchUrl } from "../fetcher.ts";
 
 /**
  * Handle textDocument/definition request.
+ * Returns cached markdown file location or null.
  */
 export async function handleTextDocumentDefinition(
-  request: JsonRpcRequest,
+  params: DefinitionParams,
   context: LspContext,
-): Promise<HandlerOutput> {
-  // TODO: Validate request params
-  const params = request.params as DefinitionParams;
-
-  // Get document URI and position
+): Promise<Location | null> {
   const documentUri = params.textDocument.uri;
   const position = params.position;
 
@@ -34,13 +26,7 @@ export async function handleTextDocumentDefinition(
 
   // Get line at cursor position
   if (position.line >= lines.length) {
-    return {
-      response: {
-        jsonrpc: "2.0",
-        id: request.id,
-        result: null,
-      },
-    };
+    return null;
   }
 
   const line = lines[position.line];
@@ -49,14 +35,7 @@ export async function handleTextDocumentDefinition(
   const url = extractLinkAtPosition(line, position.character);
 
   if (!url) {
-    // No link found
-    return {
-      response: {
-        jsonrpc: "2.0",
-        id: request.id,
-        result: null,
-      },
-    };
+    return null;
   }
 
   // Check cache first
@@ -68,41 +47,23 @@ export async function handleTextDocumentDefinition(
     const fetchResult = await fetchUrl(url);
 
     if (fetchResult.isExternal) {
-      // Send window/showDocument request for external URLs
-      return {
-        response: {
-          jsonrpc: "2.0",
-          id: request.id,
-          result: null,
-        },
-        serverRequest: {
-          jsonrpc: "2.0",
-          method: "window/showDocument",
-          params: {
-            uri: url,
-            external: true,
-          },
-        },
-      };
+      // Send window/showDocument request via context connection
+      await context.connection.sendRequest("window/showDocument", {
+        uri: url,
+        external: true,
+      });
+      return null;
     }
 
     await saveToCache(cachePath, fetchResult.content);
   }
 
   // Return location of cached markdown file
-  const location: Location = {
+  return {
     uri: `file://${cachePath}`,
     range: {
       start: { line: 0, character: 0 },
       end: { line: 0, character: 0 },
-    },
-  };
-
-  return {
-    response: {
-      jsonrpc: "2.0",
-      id: request.id,
-      result: location,
     },
   };
 }

@@ -4,8 +4,17 @@
 
 import { assertEquals } from "@std/assert";
 import { handleTextDocumentDefinition } from "./textDocument_definition.ts";
-import type { JsonRpcRequest } from "../types/jsonrpc.ts";
+import type { DefinitionParams } from "vscode-languageserver";
 import type { LspContext } from "../types/lsp.ts";
+import type { Connection } from "vscode-languageserver";
+
+// Mock connection for testing
+const createMockConnection = (): Connection => ({
+  sendRequest: () => Promise.resolve(),
+  listen: () => {},
+  onInitialize: () => {},
+  onDefinition: () => {},
+} as unknown as Connection);
 
 Deno.test({
   name: "textDocument/definition handler - no link found",
@@ -20,24 +29,17 @@ Deno.test({
     try {
       const context: LspContext = {
         cacheDir: "/tmp/crawl-ls-cache",
+        connection: createMockConnection(),
       };
 
-      const request: JsonRpcRequest = {
-        jsonrpc: "2.0",
-        method: "textDocument/definition",
-        params: {
-          textDocument: { uri: `file://${testFile}` },
-          position: { line: 0, character: 5 },
-        },
-        id: 1,
+      const params: DefinitionParams = {
+        textDocument: { uri: `file://${testFile}` },
+        position: { line: 0, character: 5 },
       };
 
-      const output = await handleTextDocumentDefinition(request, context);
+      const result = await handleTextDocumentDefinition(params, context);
 
-      assertEquals(output.response.jsonrpc, "2.0");
-      assertEquals(output.response.id, 1);
-      assertEquals(output.response.result, null);
-      assertEquals(output.serverRequest, undefined);
+      assertEquals(result, null);
     } finally {
       try {
         await Deno.remove(testFile);
@@ -61,24 +63,17 @@ Deno.test({
     try {
       const context: LspContext = {
         cacheDir: "/tmp/crawl-ls-cache",
+        connection: createMockConnection(),
       };
 
-      const request: JsonRpcRequest = {
-        jsonrpc: "2.0",
-        method: "textDocument/definition",
-        params: {
-          textDocument: { uri: `file://${testFile}` },
-          position: { line: 10, character: 0 },
-        },
-        id: 2,
+      const params: DefinitionParams = {
+        textDocument: { uri: `file://${testFile}` },
+        position: { line: 10, character: 0 },
       };
 
-      const output = await handleTextDocumentDefinition(request, context);
+      const result = await handleTextDocumentDefinition(params, context);
 
-      assertEquals(output.response.jsonrpc, "2.0");
-      assertEquals(output.response.id, 2);
-      assertEquals(output.response.result, null);
-      assertEquals(output.serverRequest, undefined);
+      assertEquals(result, null);
     } finally {
       try {
         await Deno.remove(testFile);
@@ -102,29 +97,19 @@ Deno.test({
     try {
       const context: LspContext = {
         cacheDir: "/tmp/crawl-ls-cache",
+        connection: createMockConnection(),
       };
 
-      const request: JsonRpcRequest = {
-        jsonrpc: "2.0",
-        method: "textDocument/definition",
-        params: {
-          textDocument: { uri: `file://${testFile}` },
-          position: { line: 0, character: 15 },
-        },
-        id: 3,
+      const params: DefinitionParams = {
+        textDocument: { uri: `file://${testFile}` },
+        position: { line: 0, character: 15 },
       };
 
-      const output = await handleTextDocumentDefinition(request, context);
+      const result = await handleTextDocumentDefinition(params, context);
 
-      assertEquals(output.response.jsonrpc, "2.0");
-      assertEquals(output.response.id, 3);
-      // Response should have result (location or null depending on fetch result)
-      assertEquals(output.response.result !== undefined, true);
-      // External URLs will have serverRequest, cached/local URLs won't
+      // Result should be null (external URL) or Location object (cached)
       assertEquals(
-        output.serverRequest === undefined ||
-          (typeof output.serverRequest === "object" &&
-            output.serverRequest.method === "window/showDocument"),
+        result === null || (typeof result === "object" && "uri" in result),
         true,
       );
     } finally {

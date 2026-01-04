@@ -4,7 +4,7 @@ local cache_dir = vim.fn.stdpath("cache") .. "/crawl_ls"
 
 --- @type vim.lsp.Config
 local crawl_ls_config = {
-  cmd = { "deno", "task", "dev", "--cache-dir", cache_dir },
+  cmd = { "deno", "task", "-q", "dev", "--cache-dir", cache_dir },
   filetypes = { "markdown" },
   single_file_support = true,
   on_init = function(client)

@@ -1,91 +1,42 @@
 /**
  * LSP Server for CrawlLS.
- * Implements JSON-RPC protocol over stdin/stdout.
+ * Implements JSON-RPC protocol using vscode-languageserver.
  */
 
-import { type } from "arktype";
-
-import type { JsonRpcRequest } from "./types/jsonrpc.ts";
-import { JsonRpcRequest as JsonRpcRequestValidator } from "./types/jsonrpc.ts";
-import type { LspContext } from "./types/lsp.ts";
-import type { HandlerOutput } from "./types/handler.ts";
-import { readMessage, writeMessage } from "./io/message.ts";
+import process from "node:process";
+import { TextDocuments } from "vscode-languageserver";
+import { TextDocument } from "vscode-languageserver-textdocument";
+import { createConnection } from "vscode-languageserver/node.js";
 import { handleInitialize } from "./handlers/initialize.ts";
 import { handleTextDocumentDefinition } from "./handlers/textDocument_definition.ts";
+import type { LspContext } from "./types/lsp.ts";
 
-/**
- * Validate and process a single JSON-RPC request and return handler output.
- */
-export async function processRequest(
-  request: JsonRpcRequest,
-  context: LspContext,
-): Promise<HandlerOutput> {
-  try {
-    switch (request.method) {
-      case "initialize":
-        return handleInitialize(request);
-      case "textDocument/definition":
-        return await handleTextDocumentDefinition(
-          request,
-          context,
-        );
-      default:
-        return {
-          response: {
-            jsonrpc: "2.0",
-            id: request.id,
-            error: {
-              code: -32601,
-              message: `Method not found: ${request.method}`,
-            },
-          },
-        } satisfies HandlerOutput;
-    }
-  } catch (error) {
-    console.error("Handler error:", error);
-    return {
-      response: {
-        jsonrpc: "2.0",
-        id: request.id,
-        error: {
-          code: -32603,
-          message: "Internal error",
-        },
-      },
-    } satisfies HandlerOutput;
-  }
+function createHandlerWrapper(context: LspContext) {
+  return <P, R>(handler: (params: P, context: LspContext) => Promise<R>) =>
+  async (params: P): Promise<R> => {
+    return await handler(params, context);
+  };
 }
 
-/**
- * Start the LSP server.
- * Handles all side effects (I/O operations).
- */
-export async function startLspServer(context: LspContext) {
-  while (true) {
-    const message = await readMessage();
-    if (!message) {
-      await new Promise((resolve) => setTimeout(resolve, 10));
-      continue;
-    }
+export function startLspServer(cacheDir: string): void {
+  const connection = createConnection(
+    process.stdin,
+    process.stdout,
+  );
+  const documents = new TextDocuments(TextDocument);
+  documents.listen(connection);
 
-    const request = JSON.parse(message);
-    const validatedRequest = JsonRpcRequestValidator(request);
-    if (validatedRequest instanceof type.errors) {
-      console.error(
-        "Received invalid JSON-RPC request:",
-        validatedRequest.summary,
-      );
-      continue;
-    }
+  const context: LspContext = {
+    cacheDir,
+    connection,
+  };
 
-    const output = await processRequest(validatedRequest, context);
+  const wrap = createHandlerWrapper(context);
 
-    // Send response to client
-    writeMessage(output.response);
+  connection.onInitialize(wrap(handleInitialize));
+  connection.onInitialized(() => {
+    connection.onDefinition(wrap(handleTextDocumentDefinition));
+  });
 
-    // If handler generated a server request, send it
-    if (output.serverRequest) {
-      writeMessage(output.serverRequest);
-    }
-  }
+  connection.listen();
 }
