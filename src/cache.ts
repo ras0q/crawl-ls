@@ -14,20 +14,20 @@ const DENIED_SEARCH_PARAM_KEYS = [
  */
 export function getCachePath(urlString: string, cacheDir: string): string {
   const url = new URL(urlString);
-  const pathname = url.pathname === "/" ? "" : url.pathname;
+  const safePath = encodeURIComponent(url.pathname)
+    .replace(/%2F/g, "/")
+    .replace(/\/$/, "");
 
-  let hasSearchParams = false;
   for (const key of url.searchParams.keys()) {
     if (!DENIED_SEARCH_PARAM_KEYS.includes(key)) {
       url.searchParams.delete(key);
-      continue;
     }
-    hasSearchParams = true;
   }
 
-  const cacheKey = `${url.host}${pathname}${
-    hasSearchParams ? "?" : ""
-  }${url.searchParams}`;
+  const safeParams = url.searchParams.toString();
+  const cacheKey = `${url.host}${safePath}${
+    safeParams ? "?" : ""
+  }${safeParams}`;
 
   const filename = `${cacheKey}.md`;
   return join(cacheDir, filename);
